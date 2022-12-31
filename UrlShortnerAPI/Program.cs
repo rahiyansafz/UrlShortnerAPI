@@ -1,9 +1,16 @@
+using Microsoft.EntityFrameworkCore;
+
+using UrlShortnerAPI.Models;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<ApiDbContext>(options => options.UseSqlite(connStr));
 
 var app = builder.Build();
 
@@ -16,29 +23,56 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
+app.MapPost("/short-url", async (UrlDto url, ApiDbContext db, HttpContext ctx) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    // Validating the input url
+    if (!Uri.TryCreate(url.Url, UriKind.Absolute, out var inputUrl))
+        return Results.BadRequest("Invalid url has been provided!");
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
+    // Creating a short version of the provided url
+    var random = new Random();
+    const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890@abcdefghijklmnopqrstuvwxyz";
+    var randomStr = new String(Enumerable.Repeat(chars, 8).Select(x => x[random.Next(x.Length)]).ToArray());
+
+    // Mapping the short url with the long one
+    var sUrl = new UrlManagement()
+    {
+        Url = url.Url,
+        ShortUrl = randomStr
+    };
+
+    // Saving the mapping to the db 
+    db.Urls.Add(sUrl);
+    await db.SaveChangesAsync();
+
+    // Construct url
+    var response = $"{ctx.Request.Scheme}://{ctx.Request.Host}/{sUrl.ShortUrl}";
+
+    return Results.Ok(new UrlShortResponseDto()
+    {
+        Url = response
+    });
 })
-.WithName("GetWeatherForecast")
+.WithName("ShortUrl")
 .WithOpenApi();
+
+app.MapFallback(async (ApiDbContext db, HttpContext ctx) =>
+{
+    var path = ctx.Request.Path.ToUriComponent().Trim('/');
+    var urlMatch = await db.Urls.FirstOrDefaultAsync(x => x.ShortUrl.Trim()
+                                                       == path.Trim());
+
+    if (urlMatch is null)
+        return Results.BadRequest("Invalid request");
+
+    return Results.Redirect(urlMatch.Url);
+});
 
 app.Run();
 
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+class ApiDbContext : DbContext
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public virtual DbSet<UrlManagement> Urls { get; set; }
+
+    public ApiDbContext(DbContextOptions<ApiDbContext> options) : base(options) { }
 }
