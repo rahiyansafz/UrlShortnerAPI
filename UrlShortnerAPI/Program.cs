@@ -9,8 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<ApiDbContext>(options => options.UseSqlite(connStr));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<ApiDbContext>(options => options.UseSqlite(connectionString));
 
 var app = builder.Build();
 
