@@ -29,7 +29,7 @@ app.MapPost("/short-url", async (UrlDto url, ApiDbContext db, HttpContext ctx) =
     // Creating a short version of the provided url
     var random = new Random();
     const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890@abcdefghijklmnopqrstuvwxyz";
-    var randomStr = new String(Enumerable.Repeat(chars, 8).Select(x => x[random.Next(x.Length)]).ToArray());
+    var randomStr = new string(Enumerable.Repeat(chars, 8).Select(x => x[random.Next(x.Length)]).ToArray());
 
     // Mapping the short url with the long one
     var sUrl = new UrlManagement()
@@ -59,10 +59,7 @@ app.MapFallback(async (ApiDbContext db, HttpContext ctx) =>
     var urlMatch = await db.Urls.FirstOrDefaultAsync(x => x.ShortUrl.Trim()
                                                        == path.Trim());
 
-    if (urlMatch is null)
-        return Results.BadRequest("Invalid request");
-
-    return Results.Redirect(urlMatch.Url);
+    return urlMatch is null ? Results.BadRequest("Invalid request") : Results.Redirect(urlMatch.Url);
 });
 
 app.Run();
